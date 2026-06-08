@@ -136,6 +136,33 @@ AND createdAt >= NOW() - INTERVAL 7 DAY;
 
 ---
 
+## Stage 4
+
+**1. The Problem:**
+Fetching notifications from the DB on *every single page load* for thousands of students will instantly kill the database with too many read operations.
+
+**2. Suggested Solutions & Tradeoffs:**
+
+* **Strategy 1: Caching (Redis)**
+  Store the student's recent notifications in a fast in-memory cache like Redis instead of hitting MongoDB.
+  * *Pros:* Lightning-fast reads. Massive drop in DB load.
+  * *Cons:* "Cache Invalidation" is tricky. If a notification is read, we must ensure the cache updates instantly, or the user sees stale data. 
+
+* **Strategy 2: WebSockets / Server-Sent Events (SSE)**
+  The frontend fetches *once* on login. From then on, the backend pushes new alerts directly to the client via a persistent WebSocket connection.
+  * *Pros:* Zero repeated GET requests. Real-time, seamless user experience.
+  * *Cons:* Harder to implement and scale. Persistent connections eat up server memory.
+
+* **Strategy 3: Pagination / Cursor-based Fetching**
+  Only fetch the top 10 most recent notifications instead of the whole history.
+  * *Pros:* Very easy to implement. Reduces the payload size.
+  * *Cons:* Doesn't stop the sheer *number* of DB queries happening on every page load, it just makes them slightly lighter.
+
+**3. Final Recommendation:**
+I would combine **Redis Caching** for the initial quick load, and **WebSockets** so the frontend doesn't need to keep asking the server for updates as the user clicks around.
+
+---
+
 ## Stage 5
 
 **1. Shortcomings:**
@@ -151,25 +178,28 @@ Move to an **Asynchronous Message Queue** (like RabbitMQ or Redis). The main API
 No. DB saves are fast and reliable. Email APIs are slow and rely on external networks. Decouple them to keep your main app fast and stable.
 
 **Revised Pseudocode:**
-```python
-def process_notification(student_id, message):
-    # 1. Save to DB first so we don't lose the record
-    notif_id = save_to_db(student_id, message, status="pending")
-    
-    # 2. Push to a background queue
-    queue.push(task="send_email", data={"id": notif_id, "student_id": student_id, "message": message})
-    queue.push(task="push_to_app", data={"id": notif_id, "student_id": student_id, "message": message})
-    
-    return "processing"
+```javascript
+async function processNotification(studentId, message) {
+  // 1. Save to DB first so we don't lose the record
+  const notifId = await saveToDb(studentId, message, 'pending');
+  
+  // 2. Push to a background queue (e.g., BullMQ / Redis)
+  await emailQueue.add('send_email', { id: notifId, studentId, message });
+  await appPushQueue.add('push_to_app', { id: notifId, studentId, message });
+  
+  return { status: "processing" };
+}
 
-# Worker Process
-def email_worker(job):
-    try:
-        send_email(job.student_id, job.message)
-        update_db(job.id, status="sent")
-    except Exception:
-        # Let the queue handle retries
-        raise
+// Worker Process (runs independently)
+emailQueue.process(async (job) => {
+  try {
+    await sendEmail(job.data.studentId, job.data.message);
+    await updateDb(job.data.id, 'sent');
+  } catch (error) {
+    // Let the queue handle automatic retries
+    throw error; 
+  }
+});
 ```
 
 ---
