@@ -19,12 +19,12 @@ const Log = async (stack, level, pkg, message) => {
       {
         stack,
         level,
-        package: pkg,
-        message,
+        logClass: pkg,
+        logMessage: message,
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
+          Authorization: `${process.env.ACCESS_TOKEN}`,
           "Content-Type": "application/json",
         },
       }
