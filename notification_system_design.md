@@ -127,11 +127,13 @@ Add a **Composite Index** on `(studentID, isRead, createdAt)`. This drops the co
 **No, bad idea.** It kills write performance because every insert/update has to update all those indexes. It also wastes a ton of disk space. Only index what you actually filter or sort by.
 
 **4. Query for placement notifications in the last 7 days:**
-```sql
-SELECT DISTINCT studentID
-FROM notifications
-WHERE notificationType = 'Placement'
-AND createdAt >= NOW() - INTERVAL 7 DAY;
+```javascript
+db.notifications.distinct("studentID", {
+  type: "Placement",
+  createdAt: { 
+    $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) 
+  }
+})
 ```
 
 ---
