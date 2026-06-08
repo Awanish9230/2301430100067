@@ -15,7 +15,7 @@
     }
 }
 
-##Response
+### logs of notifications
 {
     "success": true,
     "count": 8,
@@ -110,3 +110,5 @@
         }
     ]
 }
+
+# logs of notifications
